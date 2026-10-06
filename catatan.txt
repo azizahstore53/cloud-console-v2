@@ -1,0 +1,27 @@
+📌 Ringkasan Masalah & Solusi
+1. Error Import otplib saat Setup (500 Internal Server Error)
+Penyebab: Bundler Webpack di Next.js App Router (RSC) gagal membaca cara export modul default dari package otplib.
+
+Solusi:
+
+Meng-install ulang otplib versi stabil (12.0.1).
+
+Memperbarui file src/lib/auth/two-factor/two-factor.ts menggunakan pengecekan defensif/fallback untuk menyelesaikan ekspor authenticator:
+
+TypeScript
+const authenticator =
+  (otplibNamespace as any).authenticator ??
+  (otplibNamespace as any).default?.authenticator ??
+  (otplibNamespace as any).default;
+2. Error Verifikasi Token saat Enable (400 Bad Request)
+Penyebab: Perbedaan/desinkronisasi waktu (clock drift) beberapa detik antara server/PC dengan aplikasi Authenticator di HP, serta opsi batas toleransi bawaan otplib yang terlalu ketat.
+
+Solusi:
+
+Menambahkan pengaturan toleransi jendela waktu (window: 1) dan pembersihan spasi input pada method verifyToken:
+
+TypeScript
+authenticator.options = { window: 1 };
+const cleanedToken = token.trim().replace(/\s+/g, '');
+return authenticator.verify({ token: cleanedToken, secret });
+Melakukan Time Sync (Koreksi Waktu) di aplikasi Google Authenticator HP & jam Windows, lalu melakukan scan ulang QR Code baru.

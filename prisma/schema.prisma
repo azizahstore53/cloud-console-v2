@@ -1,0 +1,611 @@
+// ============================================================================
+// Cloud Console Platform — Prisma Schema
+// PostgreSQL + Prisma ORM
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+// ENUMS
+// ----------------------------------------------------------------------------
+
+// Staff roles (SUPER_ADMIN, ADMIN, BILLING, SUPPORT, DEVELOPER) can access
+// /admin; CUSTOMER cannot. What each staff role can actually DO within
+// /admin is governed by src/lib/permissions.ts, not by this enum alone —
+// this just lists the valid values a user's `role` column can hold.
+enum Role {
+  SUPER_ADMIN // Full access, including granting/revoking ADMIN and other staff roles.
+  ADMIN       // Full operational access (users, billing, instances, catalog, news) — cannot promote anyone to ADMIN/SUPER_ADMIN.
+  BILLING     // Billing/invoices/transactions only.
+  SUPPORT     // Customer instances only (view, reboot, terminate on request) — no billing, no user/role management.
+  DEVELOPER   // Instances + catalog (plans/regions/blueprints) — technical/infra config, no billing or user management.
+  CUSTOMER    // Regular paying user — no /admin access. (Was named USER before roles were split out; see migration notes.)
+}
+
+enum FirewallProtocol {
+  TCP
+  UDP
+  ICMP
+}
+
+enum FirewallAction {
+  ALLOW
+  DENY
+}
+
+enum InstanceStatus {
+  PROVISIONING
+  RUNNING
+  STOPPED
+  REBOOTING
+  TERMINATING
+  TERMINATED
+  ERROR
+}
+
+enum InstanceAction {
+  START
+  STOP
+  REBOOT
+  TERMINATE
+}
+
+enum DeploymentStatus {
+  PENDING
+  DEPLOYING
+  RUNNING
+  FAILED
+  STOPPED
+  REMOVED
+}
+
+enum BlueprintType {
+  WORDPRESS
+  NODEJS
+  DOCKER
+  POSTGRESQL
+  MYSQL
+  REDIS
+  STATIC_SITE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+  REFUNDED
+}
+
+enum TransactionType {
+  TOPUP
+  USAGE_CHARGE
+  REFUND
+  ADJUSTMENT
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  EXPIRED
+}
+
+enum PaymentGateway {
+  XENDIT
+  MIDTRANS
+  DOIT
+  MANUAL_TRANSFER
+  BALANCE
+}
+
+enum BillingCycle {
+  HOURLY
+  MONTHLY
+}
+
+enum ActivityCategory {
+  AUTH
+  INSTANCE
+  BILLING
+  DEPLOYMENT
+  SSH_KEY
+  ACCOUNT
+  SYSTEM
+}
+
+// ----------------------------------------------------------------------------
+// USER & AUTH
+// ----------------------------------------------------------------------------
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  emailVerified   DateTime?
+  name            String?
+  passwordHash    String?
+  image           String?
+  role            Role      @default(CUSTOMER)
+  companyName     String?
+  phoneNumber     String?
+
+  // Wallet / prepaid balance (stored in smallest currency unit, e.g. IDR cents)
+  balance         Int       @default(0)
+  currency        String    @default("IDR")
+
+  isActive        Boolean   @default(true)
+
+  // 2FA / Security
+  twoFactorSecret   String?
+  twoFactorEnabled  Boolean   @default(false)
+  twoFactorRecoveryCodes String? @db.Text
+  lastTwoFactorVerifiedAt DateTime?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  accounts        Account[]
+  sessions        Session[]
+  instances       Instance[]
+  deployments     Deployment[]
+  sshKeys         SshKey[]
+  invoices        Invoice[]
+  transactions    Transaction[]
+  activityLogs    ActivityLog[]
+  passwordResets  PasswordResetToken[]
+  notifications   Notification[]
+  ticketsOpened   SupportTicket[]  @relation("TicketCustomer")
+  ticketsAssigned SupportTicket[]  @relation("TicketAssignee")
+  ticketMessages  TicketMessage[]  @relation("TicketMessageSender")
+
+  @@map("users")
+}
+
+// NextAuth.js required models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+// ----------------------------------------------------------------------------
+// SSH KEYS
+// ----------------------------------------------------------------------------
+
+model SshKey {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  publicKey   String   @db.Text
+  fingerprint String
+  createdAt   DateTime @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instances Instance[]
+
+  @@unique([userId, name])
+  @@map("ssh_keys")
+}
+
+// ----------------------------------------------------------------------------
+// COMPUTE — VIRTUAL MACHINES / INSTANCES
+// ----------------------------------------------------------------------------
+
+model Region {
+  id        String   @id @default(cuid())
+  code      String   @unique // e.g. "id-jkt-1"
+  name      String   // e.g. "Jakarta 1"
+  country   String
+  isActive  Boolean  @default(true)
+
+  instances Instance[]
+
+  @@map("regions")
+}
+
+model InstancePlan {
+  id            String   @id @default(cuid())
+  name          String   // e.g. "Small-2"
+  vcpu          Int
+  ramMb         Int
+  storageGb     Int
+  pricePerHour  Int      // smallest currency unit
+  pricePerMonth Int
+  isActive      Boolean  @default(true)
+
+  instances Instance[]
+
+  @@map("instance_plans")
+}
+
+model Instance {
+  id             String          @id @default(cuid())
+  userId         String
+  name           String
+  hostname       String?
+  status         InstanceStatus  @default(PROVISIONING)
+
+  // Provider abstraction
+  provider       String          @default("mock") // "mock" | "openstack" | "proxmox" | "aws"
+  externalId     String?         // ID on the underlying provider/hypervisor
+  imageSlug      String          // e.g. "ubuntu-22-04", "debian-12"
+  imageLabel     String
+
+  regionId       String
+  planId         String
+  sshKeyId       String?
+
+  ipv4Address    String?
+  ipv6Address    String?
+
+  billingCycle   BillingCycle    @default(HOURLY)
+
+  provisionedAt  DateTime?
+  terminatedAt   DateTime?
+  // Metering anchor: usage is billed from this timestamp up to "now" each
+  // time the hourly billing job runs, then this is advanced to that "now".
+  // Reset to the current time whenever the instance transitions to RUNNING
+  // (create, or a START action) so stopped time is never billed. Cleared
+  // (left as-is, simply unused) while the instance is not RUNNING.
+  lastBilledAt   DateTime?
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  region         Region          @relation(fields: [regionId], references: [id])
+  plan           InstancePlan    @relation(fields: [planId], references: [id])
+  sshKey         SshKey?         @relation(fields: [sshKeyId], references: [id])
+
+  deployments    Deployment[]
+  usageRecords   UsageRecord[]
+  firewallRules   FirewallRule[]
+  snapshots      InstanceSnapshot[]
+  activityLogs   ActivityLog[]
+  supportTickets SupportTicket[]
+
+  @@index([userId])
+  @@map("instances")
+}
+
+// Tracks metered usage for billing calculation (hourly snapshots)
+model UsageRecord {
+  id          String   @id @default(cuid())
+  instanceId  String
+  periodStart DateTime
+  periodEnd   DateTime
+  amount      Int      // charge for this period, smallest currency unit
+  billed      Boolean  @default(false)
+
+  instance Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([instanceId])
+  @@map("usage_records")
+}
+
+model InstanceSnapshot {
+  id          String   @id @default(cuid())
+  instanceId  String
+  name        String
+  externalId  String   // ID on the provider side
+  sizeGb      Float?
+  createdAt   DateTime @default(now())
+
+  instance Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([instanceId])
+  @@map("instance_snapshots")
+}
+
+model FirewallRule {
+  id          String           @id @default(cuid())
+  instanceId  String
+  protocol    FirewallProtocol @default(TCP)
+  portStart   Int
+  portEnd     Int
+  source      String           @default("0.0.0.0/0") // CIDR
+  action      FirewallAction   @default(ALLOW)
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  instance Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([instanceId])
+  @@map("firewall_rules")
+}
+
+// ----------------------------------------------------------------------------
+// APP DEPLOYER (PaaS)
+// ----------------------------------------------------------------------------
+
+model Blueprint {
+  id          String        @id @default(cuid())
+  type        BlueprintType
+  name        String        // "WordPress", "Node.js", "Docker Container"
+  description String
+  iconSlug    String
+  isActive    Boolean       @default(true)
+
+  deployments Deployment[]
+
+  @@map("blueprints")
+}
+
+model Deployment {
+  id           String           @id @default(cuid())
+  userId       String
+  instanceId   String?
+  blueprintId  String
+  name         String
+  status       DeploymentStatus @default(PENDING)
+  config       Json?            // env vars, ports, install options
+  domain       String?
+  logsUrl      String?
+
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  deployedAt   DateTime?
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instance  Instance?  @relation(fields: [instanceId], references: [id])
+  blueprint Blueprint  @relation(fields: [blueprintId], references: [id])
+
+  @@index([userId])
+  @@map("deployments")
+}
+
+// ----------------------------------------------------------------------------
+// BILLING — WALLET, INVOICES, TRANSACTIONS
+// ----------------------------------------------------------------------------
+
+model Invoice {
+  id            String        @id @default(cuid())
+  userId        String
+  invoiceNumber String        @unique
+  status        InvoiceStatus @default(DRAFT)
+  subtotal      Int
+  tax           Int           @default(0)
+  total         Int
+  currency      String        @default("IDR")
+  dueDate       DateTime
+  paidAt        DateTime?
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items InvoiceItem[]
+  transactions Transaction[]
+
+  @@index([userId])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  description String
+  quantity    Int     @default(1)
+  unitPrice   Int
+  amount      Int
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_items")
+}
+
+// Wallet ledger: top-ups, usage charges, refunds, adjustments
+model Transaction {
+  id          String             @id @default(cuid())
+  userId      String
+  invoiceId   String?
+  type        TransactionType
+  status      TransactionStatus  @default(PENDING)
+  amount      Int                // positive for credit, negative for debit
+  balanceAfter Int
+  gateway     PaymentGateway?
+  gatewayRef  String?            // external payment ref/ID from Xendit/Midtrans mock
+  description String?
+
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoice Invoice? @relation(fields: [invoiceId], references: [id])
+
+  @@unique([gatewayRef])
+  @@index([userId])
+  @@map("transactions")
+}
+
+model ActivityLog {
+  id          String           @id @default(cuid())
+  userId      String
+  instanceId  String?
+  category    ActivityCategory
+  action      String
+  message     String
+  createdAt   DateTime         @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instance Instance? @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([instanceId])
+  @@map("activity_logs")
+}
+
+// ----------------------------------------------------------------------------
+// NOTIFICATIONS
+// ----------------------------------------------------------------------------
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String   // e.g. "DEPLOYMENT", "BILLING", "SYSTEM"
+  isRead    Boolean  @default(false)
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("notifications")
+}
+
+// ----------------------------------------------------------------------------
+// NEWS / BLOG
+// ----------------------------------------------------------------------------
+
+enum NewsStatus {
+  DRAFT
+  PUBLISHED
+}
+
+// How the article came to exist — lets the admin UI show a "🤖 AI" badge
+// on bot-generated drafts without guessing from content alone.
+enum NewsSource {
+  MANUAL
+  AI_TELEGRAM
+}
+
+model News {
+  id             String     @id @default(cuid())
+  title          String
+  slug           String     @unique
+  excerpt        String
+  content        String     @db.Text
+  coverImageUrl  String?
+  status         NewsStatus @default(DRAFT)
+  source         NewsSource @default(MANUAL)
+  // Free-form prompt/topic that produced this article, kept for context when
+  // reviewing an AI draft — null for manually-written posts.
+  aiPrompt       String?
+  publishedAt    DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([status, publishedAt])
+  @@map("news")
+}
+
+// ----------------------------------------------------------------------------
+// SUPPORT TICKETS (customer <-> support chat)
+// ----------------------------------------------------------------------------
+
+// OPEN     = waiting for staff to answer (new ticket, or the customer wrote last)
+// PENDING  = waiting for the customer (staff wrote last)
+// RESOLVED = closed; a new customer message reopens it to OPEN
+enum TicketStatus {
+  OPEN
+  PENDING
+  RESOLVED
+}
+
+enum TicketMessageSender {
+  CUSTOMER
+  STAFF
+  SYSTEM // automatic notes such as "ticket marked as resolved"
+}
+
+model SupportTicket {
+  id                String       @id @default(cuid())
+  subject           String
+  status            TicketStatus @default(OPEN)
+  customerId        String
+  assignedToId      String?
+  relatedInstanceId String?
+  // True while staff (or the system) has written something the customer has
+  // not opened yet. Drives the unread badge on the customer's sidebar.
+  customerUnread    Boolean      @default(false)
+  lastMessageAt     DateTime     @default(now())
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  customer          User         @relation("TicketCustomer", fields: [customerId], references: [id], onDelete: Cascade)
+  assignedTo        User?        @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  relatedInstance   Instance?    @relation(fields: [relatedInstanceId], references: [id], onDelete: SetNull)
+  messages          TicketMessage[]
+
+  @@index([customerId, lastMessageAt])
+  @@index([status, lastMessageAt])
+  @@map("support_tickets")
+}
+
+model TicketMessage {
+  id         String              @id @default(cuid())
+  ticketId   String
+  senderId   String?
+  senderType TicketMessageSender
+  body       String              @db.Text
+  // Set together: imageUrl is the server-generated filename (never the
+  // client's original path), imageName is the original filename kept only
+  // for display (e.g. "screenshot.png" in the UI) — never used to build a
+  // filesystem path.
+  imageUrl   String?
+  imageName  String?
+  createdAt  DateTime            @default(now())
+
+  ticket     SupportTicket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender     User?               @relation("TicketMessageSender", fields: [senderId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_messages")
+}
