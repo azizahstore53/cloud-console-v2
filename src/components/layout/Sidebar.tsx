@@ -15,6 +15,7 @@ import {
   Cloud,
   ShieldAlert,
   LifeBuoy,
+  ShieldCheck,
 } from "lucide-react";
 import { isStaff } from "@/lib/permissions";
 import { useSupportBadge } from "@/hooks/useSupportBadge";
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { href: "/compute", label: "Compute", icon: Server },
   { href: "/storage", label: "Storage", icon: HardDrive },
   { href: "/networking", label: "Networking", icon: Network },
+  { href: "/vpn", label: "VPN Tunneling", icon: ShieldCheck },
   { href: "/apps", label: "App Deployer", icon: Rocket },
   { href: "/ssh-keys", label: "SSH Keys", icon: KeyRound },
   { href: "/billing", label: "Billing", icon: Receipt },

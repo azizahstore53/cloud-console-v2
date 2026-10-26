@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { isStaff } from "@/lib/permissions";
 
-const PUBLIC_PATHS = ["/login", "/register", "/forgot-password", "/reset-password", "/auth/two-factor", "/berita"];
+const PUBLIC_PATHS = ["/login", "/register", "/forgot-password", "/reset-password", "/auth/two-factor", "/berita", "/api/webhooks/payment"];
 // Subset of PUBLIC_PATHS that an already-authenticated person gets bounced
 // away from (to /dashboard). Reset-password is deliberately excluded —
 // someone might follow a reset link while still logged in on this device.

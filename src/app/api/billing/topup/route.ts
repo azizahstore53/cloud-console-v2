@@ -42,7 +42,10 @@ export async function POST(req: NextRequest) {
 
   await prisma.transaction.update({
     where: { id: transaction.id },
-    data: { gatewayRef: invoice.id },
+    data: {
+      gatewayRef: invoice.id,
+      paymentUrl: invoice.invoiceUrl
+    },
   });
 
   return NextResponse.json({ checkoutUrl: invoice.invoiceUrl, transactionId: transaction.id });

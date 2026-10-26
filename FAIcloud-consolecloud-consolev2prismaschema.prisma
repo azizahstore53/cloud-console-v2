@@ -1,0 +1,51 @@
+
+// ----------------------------------------------------------------------------
+// VPN & TUNNELING (WireGuard)
+// ----------------------------------------------------------------------------
+
+enum VpnStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+  SUSPENDED
+}
+
+model VpnServer {
+  id            String   @id @default(cuid())
+  name          String   // e.g. "VPN-Gateway-JKT-1"
+  publicIp      String   @unique // IP utama VPS
+  wireguardPort Int      @default(51820)
+  privateKey    String   @db.Text // Kunci private server
+  publicKey     String   @unique
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  clients       VpnClient[]
+
+  @@map("vpn_servers")
+}
+
+model VpnClient {
+  id              String    @id @default(cuid())
+  userId          String
+  vpnServerId     String
+  
+  // WireGuard Config
+  publicKey       String    @unique // Kunci publik klien
+  internalIp      String    @unique // IP internal tunnel (e.g. 10.0.0.2)
+  
+  // Multi-IP Mapping (Solusi 2)
+  allocatedPublicIp String?  @unique // IP Publik VPS yang diberikan khusus untuk klien ini
+  
+  status          VpnStatus @default(ACTIVE)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vpnServer       VpnServer @relation(fields: [vpnServerId], references: [id])
+
+  @@index([userId])
+  @@index([vpnServerId])
+  @@map("vpn_clients")
+}

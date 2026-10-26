@@ -1,0 +1,35 @@
+# ==============================================================================
+# VPN SSH FIXER - FORCE AUTHENTICATION SYNC (HARDCODED USER)
+# ------------------------------------------------------------------------------
+# This script ensures that the 'serverwg' user is correctly configured
+# and that your local SSH key is perfectly synced to the VPS.
+# ==============================================================================
+
+Write-Host "--- Fixing VPN SSH Authentication ---" -ForegroundColor Cyan
+
+$vpsIp = "103.117.56.59"
+$sshUser = "serverwg"
+# Hardcoded to your actual user path to avoid any environment variable issues
+$pubKeyPath = "C:\Users\Prakom\.ssh\id_rsa.pub"
+
+if (-not (Test-Path $pubKeyPath)) {
+    Write-Host "[ERROR] Public key not found at $pubKeyPath" -ForegroundColor Red
+    Write-Host "Please check if id_rsa.pub exists in C:\Users\Prakom\.ssh\" -ForegroundColor Gray
+    exit
+}
+
+Write-Host "[1/3] Syncing Public Key to $sshUser..." -ForegroundColor Yellow
+$pubKey = Get-Content $pubKeyPath -Raw
+# Using ${sshUser} to avoid PowerShell Drive reference error with the colon
+ssh root@$vpsIp "mkdir -p /home/${sshUser}/.ssh && echo '$pubKey' >> /home/${sshUser}/.ssh/authorized_keys && chown -R ${sshUser}:${sshUser} /home/${sshUser}/.ssh && chmod 700 /home/${sshUser}/.ssh && chmod 600 /home/${sshUser}/.ssh/authorized_keys"
+
+Write-Host "[2/3] Verifying serverwg sudo permissions..." -ForegroundColor Yellow
+ssh root@$vpsIp "echo '${sshUser} ALL=(ALL) NOPASSWD: /usr/bin/wg, /usr/sbin/iptables, /usr/sbin/wg' > /etc/sudoers.d/vpn-manager && chmod 440 /etc/sudoers.d/vpn-manager"
+
+Write-Host "[3/3] Testing connection as $sshUser..." -ForegroundColor Yellow
+ssh $sshUser@$vpsIp "echo 'Connection Successful!'"
+
+Write-Host "`n==================================================" -ForegroundColor Green
+Write-Host "FIX COMPLETE: Your VPS is now forced to accept $sshUser" -ForegroundColor Green
+Write-Host "Now go back to Cloud Console Admin Panel and try Setup again." -ForegroundColor White
+Write-Host "==================================================" -ForegroundColor Green

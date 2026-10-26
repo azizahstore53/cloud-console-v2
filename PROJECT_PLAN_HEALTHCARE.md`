@@ -1,0 +1,37 @@
+# 🏥 Project Plan: Healthcare Secure Gateway
+**Vision:** Menyediakan solusi konektivitas aman dan instan bagi fasilitas kesehatan (Rumah Sakit/Klinik) untuk meng-online-kan server internal tanpa perlu menunggu pengajuan IP Public ke ISP.
+
+## 🎯 Target Market
+- Rumah Sakit yang membutuhkan integrasi SatuSehat / BPJS.
+- Klinik yang ingin mengimplementasikan E-Rekam Medis (ERM).
+- Fasilitas kesehatan dengan keterbatasan infrastruktur jaringan.
+
+## 🚀 Feature Roadmap
+
+### Phase 1: Foundation (The Basics) - [DONE]
+- [x] RBAC & Security Guard.
+- [x] VPN Provisioning System.
+- [x] QR Code Config Generator.
+- [x] Billing Audit Trail.
+- [x] Automated Health Check.
+
+### Phase 2: Healthcare Adaptation (Current Phase)
+- [ ] **Multi-Port Forwarding:** Mengizinkan satu tunnel untuk meneruskan banyak port (misal: HTTP, HTTPS, Database, SSH) ke server internal yang berbeda-beda.
+- [ ] **Static IP Allocation:** Menjamin IP Publik tetap (Fixed IP) untuk kebutuhan whitelisting API (BPJS/SatuSehat).
+- [ ] **Simple Status Dashboard:** Halaman monitoring khusus untuk staf IT Rumah Sakit (Check connectivity status).
+
+### Phase 3: Enterprise & Reliability
+- [ ] **High Availability (Failover):** Implementasi dual-tunnel untuk redundancy (Jika server A mati, otomatis pindah ke server B).
+- [ ] **SSL/TLS Termination (Reverse Proxy):** Integrasi dengan Nginx/Traefik agar RS bisa menggunakan domain (misal: `simrs.rs-anda.com`) dengan HTTPS.
+- [ ] **Bandwidth Management:** Limitasi kecepatan per tunnel untuk menjaga stabilitas gateway.
+
+### Phase 4: Monetization & Management
+- [ ] **B2B Contract Billing:** Sistem penagihan bulanan/tahunan (bukan top-up).
+- [ ] **SLA Monitoring:** Dashboard pelaporan uptime untuk laporan bulanan ke klien.
+- [ ] **Managed Service Module:** Fitur untuk admin membantu konfigurasi remote server RS.
+
+## 🛠 Technical Architecture
+- **Core:** WireGuard (Fast & Secure).
+- **Orchestration:** Next.js + Prisma + PostgreSQL.
+- **Gateway:** Linux VPS with custom IP tables for DNAT.
+- **Security:** End-to-end encryption, RBAC, and SSH Key-based management.

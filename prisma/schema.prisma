@@ -16,17 +16,13 @@ datasource db {
 // ENUMS
 // ----------------------------------------------------------------------------
 
-// Staff roles (SUPER_ADMIN, ADMIN, BILLING, SUPPORT, DEVELOPER) can access
-// /admin; CUSTOMER cannot. What each staff role can actually DO within
-// /admin is governed by src/lib/permissions.ts, not by this enum alone —
-// this just lists the valid values a user's `role` column can hold.
 enum Role {
-  SUPER_ADMIN // Full access, including granting/revoking ADMIN and other staff roles.
-  ADMIN       // Full operational access (users, billing, instances, catalog, news) — cannot promote anyone to ADMIN/SUPER_ADMIN.
-  BILLING     // Billing/invoices/transactions only.
-  SUPPORT     // Customer instances only (view, reboot, terminate on request) — no billing, no user/role management.
-  DEVELOPER   // Instances + catalog (plans/regions/blueprints) — technical/infra config, no billing or user management.
-  CUSTOMER    // Regular paying user — no /admin access. (Was named USER before roles were split out; see migration notes.)
+  SUPER_ADMIN
+  ADMIN
+  BILLING
+  SUPPORT
+  DEVELOPER
+  CUSTOMER
 }
 
 enum FirewallProtocol {
@@ -122,6 +118,13 @@ enum ActivityCategory {
   SYSTEM
 }
 
+enum VpnStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+  SUSPENDED
+}
+
 // ----------------------------------------------------------------------------
 // USER & AUTH
 // ----------------------------------------------------------------------------
@@ -137,18 +140,14 @@ model User {
   companyName     String?
   phoneNumber     String?
 
-  // Wallet / prepaid balance (stored in smallest currency unit, e.g. IDR cents)
   balance         Int       @default(0)
   currency        String    @default("IDR")
-
   isActive        Boolean   @default(true)
 
-  // 2FA / Security
   twoFactorSecret   String?
   twoFactorEnabled  Boolean   @default(false)
   twoFactorRecoveryCodes String? @db.Text
   lastTwoFactorVerifiedAt DateTime?
-
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -165,11 +164,11 @@ model User {
   ticketsOpened   SupportTicket[]  @relation("TicketCustomer")
   ticketsAssigned SupportTicket[]  @relation("TicketAssignee")
   ticketMessages  TicketMessage[]  @relation("TicketMessageSender")
+  vpnClients      VpnClient[]
 
   @@map("users")
 }
 
-// NextAuth.js required models
 model Account {
   id                String  @id @default(cuid())
   userId            String
@@ -223,10 +222,6 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
-// ----------------------------------------------------------------------------
-// SSH KEYS
-// ----------------------------------------------------------------------------
-
 model SshKey {
   id          String   @id @default(cuid())
   userId      String
@@ -248,8 +243,8 @@ model SshKey {
 
 model Region {
   id        String   @id @default(cuid())
-  code      String   @unique // e.g. "id-jkt-1"
-  name      String   // e.g. "Jakarta 1"
+  code      String   @unique
+  name      String
   country   String
   isActive  Boolean  @default(true)
 
@@ -260,11 +255,11 @@ model Region {
 
 model InstancePlan {
   id            String   @id @default(cuid())
-  name          String   // e.g. "Small-2"
+  name          String
   vcpu          Int
   ramMb         Int
   storageGb     Int
-  pricePerHour  Int      // smallest currency unit
+  pricePerHour  Int
   pricePerMonth Int
   isActive      Boolean  @default(true)
 
@@ -279,31 +274,19 @@ model Instance {
   name           String
   hostname       String?
   status         InstanceStatus  @default(PROVISIONING)
-
-  // Provider abstraction
-  provider       String          @default("mock") // "mock" | "openstack" | "proxmox" | "aws"
-  externalId     String?         // ID on the underlying provider/hypervisor
-  imageSlug      String          // e.g. "ubuntu-22-04", "debian-12"
+  provider       String          @default("mock")
+  externalId     String?
+  imageSlug      String
   imageLabel     String
-
   regionId       String
   planId         String
   sshKeyId       String?
-
   ipv4Address    String?
   ipv6Address    String?
-
   billingCycle   BillingCycle    @default(HOURLY)
-
   provisionedAt  DateTime?
   terminatedAt   DateTime?
-  // Metering anchor: usage is billed from this timestamp up to "now" each
-  // time the hourly billing job runs, then this is advanced to that "now".
-  // Reset to the current time whenever the instance transitions to RUNNING
-  // (create, or a START action) so stopped time is never billed. Cleared
-  // (left as-is, simply unused) while the instance is not RUNNING.
   lastBilledAt   DateTime?
-
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
@@ -323,13 +306,12 @@ model Instance {
   @@map("instances")
 }
 
-// Tracks metered usage for billing calculation (hourly snapshots)
 model UsageRecord {
   id          String   @id @default(cuid())
   instanceId  String
   periodStart DateTime
   periodEnd   DateTime
-  amount      Int      // charge for this period, smallest currency unit
+  amount      Int
   billed      Boolean  @default(false)
 
   instance Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
@@ -342,7 +324,7 @@ model InstanceSnapshot {
   id          String   @id @default(cuid())
   instanceId  String
   name        String
-  externalId  String   // ID on the provider side
+  externalId  String
   sizeGb      Float?
   createdAt   DateTime @default(now())
 
@@ -358,7 +340,7 @@ model FirewallRule {
   protocol    FirewallProtocol @default(TCP)
   portStart   Int
   portEnd     Int
-  source      String           @default("0.0.0.0/0") // CIDR
+  source      String           @default("0.0.0.0/0")
   action      FirewallAction   @default(ALLOW)
   description String?
   createdAt   DateTime         @default(now())
@@ -377,7 +359,7 @@ model FirewallRule {
 model Blueprint {
   id          String        @id @default(cuid())
   type        BlueprintType
-  name        String        // "WordPress", "Node.js", "Docker Container"
+  name        String
   description String
   iconSlug    String
   isActive    Boolean       @default(true)
@@ -394,7 +376,7 @@ model Deployment {
   blueprintId  String
   name         String
   status       DeploymentStatus @default(PENDING)
-  config       Json?            // env vars, ports, install options
+  config       Json?
   domain       String?
   logsUrl      String?
 
@@ -450,17 +432,18 @@ model InvoiceItem {
   @@map("invoice_items")
 }
 
-// Wallet ledger: top-ups, usage charges, refunds, adjustments
 model Transaction {
   id          String             @id @default(cuid())
   userId      String
   invoiceId   String?
   type        TransactionType
   status      TransactionStatus  @default(PENDING)
-  amount      Int                // positive for credit, negative for debit
+  amount      Int
+  balanceBefore Int              @default(0)
   balanceAfter Int
   gateway     PaymentGateway?
-  gatewayRef  String?            // external payment ref/ID from Xendit/Midtrans mock
+  gatewayRef  String?
+  paymentUrl  String?           @db.Text
   description String?
 
   createdAt   DateTime           @default(now())
@@ -500,9 +483,9 @@ model Notification {
   userId    String
   title     String
   message   String
-  type      String   // e.g. "DEPLOYMENT", "BILLING", "SYSTEM"
+  type      String
   isRead    Boolean  @default(false)
-  createdAt  DateTime  @default(now())
+  createdAt  DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -519,8 +502,6 @@ enum NewsStatus {
   PUBLISHED
 }
 
-// How the article came to exist — lets the admin UI show a "🤖 AI" badge
-// on bot-generated drafts without guessing from content alone.
 enum NewsSource {
   MANUAL
   AI_TELEGRAM
@@ -535,8 +516,6 @@ model News {
   coverImageUrl  String?
   status         NewsStatus @default(DRAFT)
   source         NewsSource @default(MANUAL)
-  // Free-form prompt/topic that produced this article, kept for context when
-  // reviewing an AI draft — null for manually-written posts.
   aiPrompt       String?
   publishedAt    DateTime?
   createdAt      DateTime   @default(now())
@@ -550,9 +529,6 @@ model News {
 // SUPPORT TICKETS (customer <-> support chat)
 // ----------------------------------------------------------------------------
 
-// OPEN     = waiting for staff to answer (new ticket, or the customer wrote last)
-// PENDING  = waiting for the customer (staff wrote last)
-// RESOLVED = closed; a new customer message reopens it to OPEN
 enum TicketStatus {
   OPEN
   PENDING
@@ -562,7 +538,7 @@ enum TicketStatus {
 enum TicketMessageSender {
   CUSTOMER
   STAFF
-  SYSTEM // automatic notes such as "ticket marked as resolved"
+  SYSTEM
 }
 
 model SupportTicket {
@@ -572,8 +548,6 @@ model SupportTicket {
   customerId        String
   assignedToId      String?
   relatedInstanceId String?
-  // True while staff (or the system) has written something the customer has
-  // not opened yet. Drives the unread badge on the customer's sidebar.
   customerUnread    Boolean      @default(false)
   lastMessageAt     DateTime     @default(now())
   createdAt         DateTime     @default(now())
@@ -595,17 +569,92 @@ model TicketMessage {
   senderId   String?
   senderType TicketMessageSender
   body       String              @db.Text
-  // Set together: imageUrl is the server-generated filename (never the
-  // client's original path), imageName is the original filename kept only
-  // for display (e.g. "screenshot.png" in the UI) — never used to build a
-  // filesystem path.
   imageUrl   String?
   imageName  String?
-  createdAt  DateTime            @default(now())
+  createdAt   DateTime            @default(now())
 
   ticket     SupportTicket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   sender     User?               @relation("TicketMessageSender", fields: [senderId], references: [id], onDelete: SetNull)
 
   @@index([ticketId, createdAt])
   @@map("ticket_messages")
+}
+
+// ----------------------------------------------------------------------------
+// VPN & TUNNELING (WireGuard)
+// ----------------------------------------------------------------------------
+
+model VpnIpPool {
+  id        String   @id @default(cuid())
+  ipAddress String   @unique
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("vpn_ip_pool")
+}
+
+model VpnPublicIpPool {
+  id        String   @id @default(cuid())
+  ipAddress String   @unique
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("vpn_public_ip_pool")
+}
+
+model VpnServer {
+  id            String   @id @default(cuid())
+  name          String
+  publicIp      String   @unique
+  wireguardPort Int      @default(51820)
+  privateKey    String   @db.Text
+  publicKey     String   @unique
+  sshPrivateKey String?  @db.Text
+  sshPassword   String?  @db.Text
+  sshUser       String   @default("root")
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  clients       VpnClient[]
+
+  @@map("vpn_servers")
+}
+
+model VpnClient {
+  id              String    @id @default(cuid())
+  userId          String
+  vpnServerId     String
+  publicKey       String    @unique
+  privateKey      String    @db.Text
+  internalIp      String    @unique
+  allocatedPublicIp String?  @unique
+  vpnInstallToken String?   @unique
+  status          VpnStatus @default(ACTIVE)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vpnServer       VpnServer @relation(fields: [vpnServerId], references: [id])
+  portMappings    VpnPortMapping[]
+
+  @@index([userId])
+  @@index([vpnServerId])
+  @@map("vpn_clients")
+}
+
+model VpnPortMapping {
+  id           String    @id @default(cuid())
+  vpnClientId  String
+  publicPort   Int
+  localPort    Int
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  client       VpnClient @relation(fields: [vpnClientId], references: [id], onDelete: Cascade)
+
+  @@unique([vpnClientId, publicPort])
+  @@map("vpn_port_mappings")
 }

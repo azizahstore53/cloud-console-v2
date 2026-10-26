@@ -1,9 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { getCloudProvider } from "@/lib/cloud/ProviderFactory";
 import { calculateUsageCharge } from "@/lib/billing/calculator";
+import { vpnService } from "@/lib/vpn/vpnService";
 import type { Instance, InstancePlan, User } from "@prisma/client";
 
 const LOW_BALANCE_WARNING_THRESHOLD = Number(process.env.LOW_BALANCE_WARNING_THRESHOLD ?? 50_000);
+const VPN_MONTHLY_PRICE = 300000;
 
 interface BillOneResult {
   amountCharged: number;
@@ -11,19 +13,6 @@ interface BillOneResult {
   insufficientFunds: boolean;
 }
 
-/**
- * Charges a single instance for its elapsed running time, from its
- * `lastBilledAt` anchor up to `upTo`. Always advances the anchor to `upTo`
- * regardless of outcome, so a partial/failed charge never gets re-billed.
- *
- * If the user's balance can't cover the full amount, charges whatever
- * balance remains (draining it to zero) rather than charging nothing —
- * partial usage still gets billed for what was actually consumed, and the
- * caller is told to auto-stop the instance via `insufficientFunds`.
- *
- * Returns `null` if there's nothing to bill yet (anchor missing, or less
- * than a few seconds have elapsed — avoids near-zero noise transactions).
- */
 export async function billInstanceUsage(
   instance: Instance & { plan: InstancePlan; user: User },
   upTo: Date
@@ -31,7 +20,7 @@ export async function billInstanceUsage(
   if (!instance.lastBilledAt) return null;
 
   const hoursElapsed = (upTo.getTime() - instance.lastBilledAt.getTime()) / (1000 * 60 * 60);
-  if (hoursElapsed <= 1 / 3600) return null; // less than a second — nothing meaningful to bill
+  if (hoursElapsed <= 1 / 3600) return null;
 
   const fullAmount = calculateUsageCharge(instance.plan, instance.billingCycle, hoursElapsed);
   if (fullAmount <= 0) return null;
@@ -72,8 +61,6 @@ export async function billInstanceUsage(
 
     await tx.instance.update({ where: { id: instance.id }, data: { lastBilledAt: upTo } });
 
-    // Warn once when a top-up-worthy balance drops below the threshold —
-    // only log on the crossing, not on every subsequent hourly charge.
     if (balanceAfter < LOW_BALANCE_WARNING_THRESHOLD && user.balance >= LOW_BALANCE_WARNING_THRESHOLD) {
       await tx.activityLog.create({
         data: {
@@ -93,25 +80,15 @@ export interface BillingCycleSummary {
   processed: number;
   totalCharged: number;
   autoStopped: { instanceId: string; name: string; userId: string }[];
+  vpnRevoked: { clientId: string; userId: string }[];
   errors: { instanceId: string; error: string }[];
 }
 
-/**
- * Meters every currently-RUNNING instance and charges the elapsed usage
- * since it was last billed. Instances whose owner can't cover the full
- * charge are billed whatever balance remains, then auto-stopped via the
- * cloud provider — mirroring how a real prepaid VPS platform enforces its
- * "no overdraft" billing model.
- *
- * Safe to call repeatedly / at irregular intervals: billing is based on
- * actual elapsed wall-clock time since each instance's own `lastBilledAt`
- * anchor, not a fixed hourly bucket, so a missed or delayed run just bills
- * a larger span next time rather than under- or double-charging.
- */
 export async function runHourlyBillingCycle(): Promise<BillingCycleSummary> {
   const now = new Date();
-  const summary: BillingCycleSummary = { processed: 0, totalCharged: 0, autoStopped: [], errors: [] };
+  const summary: BillingCycleSummary = { processed: 0, totalCharged: 0, autoStopped: [], vpnRevoked: [], errors: [] };
 
+  // 1. Process Instances
   const runningInstances = await prisma.instance.findMany({
     where: { status: "RUNNING" },
     include: { plan: true, user: true },
@@ -130,11 +107,7 @@ export async function runHourlyBillingCycle(): Promise<BillingCycleSummary> {
       if (result.insufficientFunds) {
         try {
           await provider.stopInstance(instance.externalId!);
-        } catch {
-          // Best-effort: even if the provider call fails, still reflect
-          // the stop in our own records so the user isn't billed further
-          // for an instance we believe is out of funds.
-        }
+        } catch {}
 
         await prisma.instance.update({ where: { id: instance.id }, data: { status: "STOPPED" } });
         await prisma.activityLog.create({
@@ -154,6 +127,35 @@ export async function runHourlyBillingCycle(): Promise<BillingCycleSummary> {
         instanceId: instance.id,
         error: err instanceof Error ? err.message : "Unknown billing error",
       });
+    }
+  }
+
+  // 2. Process VPNs (Auto-Revoke if balance is too low for future renewal)
+  // For VPNs, we can check if balance < 10,000 IDR as a critical threshold for disconnect,
+  // or check if the monthly renewal date has passed and they can't pay.
+  const activeVpns = await prisma.vpnClient.findMany({
+    where: { status: "ACTIVE" },
+    include: { user: true }
+  });
+
+  for (const vpn of activeVpns) {
+    try {
+      if (vpn.user.balance < 10000) { // Critical threshold
+        await vpnService.revokeVpnClient(vpn.id);
+
+        await prisma.activityLog.create({
+          data: {
+            userId: vpn.userId,
+            category: "BILLING",
+            action: "vpn.auto_revoke_insufficient_funds",
+            message: `VPN Tunnel was automatically revoked — wallet balance too low to maintain service.`,
+          },
+        });
+
+        summary.vpnRevoked.push({ clientId: vpn.id, userId: vpn.userId });
+      }
+    } catch (err) {
+      console.error(`Failed to revoke VPN ${vpn.id}:`, err);
     }
   }
 

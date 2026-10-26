@@ -31,22 +31,11 @@ export function TopUpDialog() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to create top-up");
 
-      // In this mock flow we immediately confirm payment client-side.
-      // A real gateway would redirect to `data.checkoutUrl` and confirm via
-      // webhook instead. Note this only sends the transaction id — the
-      // amount actually credited comes from the PENDING transaction record
-      // on the server, never from anything the client sends here.
-      const confirmRes = await fetch("/api/billing/mock-pay", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transactionId: data.transactionId }),
-      });
-      const confirmData = await confirmRes.json();
-      if (!confirmRes.ok) throw new Error(confirmData.error ?? "Payment confirmation failed");
-
-      toast.success(`${formatCurrency(confirmData.amount ?? amount)} added to your wallet`);
-      setOpen(false);
-      router.refresh();
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      } else {
+        throw new Error("Checkout URL not provided by gateway");
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -97,7 +86,7 @@ export function TopUpDialog() {
           <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
           <Button onClick={handleTopUp} disabled={loading || amount < 10000} className="gap-2">
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-            Pay with Xendit (mock)
+            Pay Now
           </Button>
         </DialogFooter>
       </DialogContent>

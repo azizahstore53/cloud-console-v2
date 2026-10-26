@@ -4,8 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/billing/calculator";
 import { TopUpDialog } from "@/components/billing/TopUpDialog";
-import { Wallet, ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { Wallet, ArrowDownLeft, ArrowUpRight, CreditCard } from "lucide-react";
 import { format } from "date-fns";
+import { Button } from "@/components/ui/button";
 
 export default async function BillingPage() {
   const session = await auth();
@@ -17,11 +18,15 @@ export default async function BillingPage() {
     prisma.invoice.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 10 }),
   ]);
 
+  const pendingPayments = transactions.filter(tx => tx.status === "PENDING");
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Billing &amp; Wallet</h1>
-        <p className="text-muted-foreground text-sm mt-1">Manage your prepaid balance, invoices, and payment history.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Billing &amp; Wallet</h1>
+          <p className="text-muted-foreground text-sm mt-1">Manage your prepaid balance, invoices, and payment history.</p>
+        </div>
       </div>
 
       <Card className="bg-gradient-to-br from-primary to-primary/70 text-primary-foreground border-0">
@@ -36,6 +41,44 @@ export default async function BillingPage() {
         </CardContent>
       </Card>
 
+      {pendingPayments.length > 0 && (
+        <Card className="border-orange-500/50 bg-orange-50/30 dark:bg-orange-900/10">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2 text-orange-600 dark:text-orange-400">
+              <CreditCard className="h-4 w-4" /> Pending Payments
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {pendingPayments.map((tx) => (
+              <div key={tx.id} className="flex items-center justify-between p-3 bg-background rounded-lg border border-orange-200 dark:border-orange-900/30 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
+                    <CreditCard className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Top Up - {formatCurrency(tx.amount)}</p>
+                    <p className="text-xs text-muted-foreground">{format(tx.createdAt, "d MMM yyyy, HH:mm")}</p>
+                  </div>
+                </div>
+                {tx.paymentUrl ? (
+                  <Button
+                    asChild
+                    size="sm"
+                    className="bg-orange-600 hover:bg-orange-700 text-white"
+                  >
+                    <a href={tx.paymentUrl} target="_blank" rel="noopener noreferrer">
+                      Pay Now
+                    </a>
+                  </Button>
+                ) : (
+                  <Badge variant="outline" className="text-muted-foreground">Processing</Badge>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader><CardTitle className="text-base">Transaction History</CardTitle></CardHeader>
@@ -49,9 +92,13 @@ export default async function BillingPage() {
                   <div className={`flex h-8 w-8 items-center justify-center rounded-full ${tx.amount >= 0 ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive"}`}>
                     {tx.amount >= 0 ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
                   </div>
-                  <div>
+                  <div className="flex flex-col">
                     <p className="text-sm font-medium">{tx.description ?? tx.type}</p>
-                    <p className="text-xs text-muted-foreground">{format(tx.createdAt, "d MMM yyyy, HH:mm")}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-muted-foreground">{format(tx.createdAt, "d MMM yyyy, HH:mm")}</p>
+                      {tx.status === "PENDING" && <Badge variant="outline" className="text-[10px] h-4 px-1">Pending</Badge>}
+                      {tx.status === "EXPIRED" && <Badge variant="destructive" className="text-[10px] h-4 px-1">Expired</Badge>}
+                    </div>
                   </div>
                 </div>
                 <span className={`text-sm font-semibold ${tx.amount >= 0 ? "text-success" : "text-foreground"}`}>
@@ -70,7 +117,7 @@ export default async function BillingPage() {
             )}
             {invoices.map((inv) => (
               <div key={inv.id} className="flex items-center justify-between py-2.5 border-b last:border-0">
-                <div>
+                <div className="flex flex-col">
                   <p className="text-sm font-medium">{inv.invoiceNumber}</p>
                   <p className="text-xs text-muted-foreground">Due {format(inv.dueDate, "d MMM yyyy")}</p>
                 </div>

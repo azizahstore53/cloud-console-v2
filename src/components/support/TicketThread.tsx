@@ -67,6 +67,20 @@ export function TicketThread({ ticketId, mode }: { ticketId: string; mode: Viewe
     };
   }, [pendingPreviewUrl]);
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData.items;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith("image/")) {
+        const file = items[i].getAsFile();
+        if (file) {
+          pickFile(file);
+          // We don't preventDefault here so text can still be pasted if image is also present,
+          // but usually, screenshot tools only put the image in the clipboard.
+        }
+      }
+    }
+  };
+
   const pickFile = (file: File | null) => {
     if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
     if (!file) {
@@ -382,6 +396,7 @@ export function TicketThread({ ticketId, mode }: { ticketId: string; mode: Viewe
                     submit();
                   }
                 }}
+                onPaste={handlePaste}
               />
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">

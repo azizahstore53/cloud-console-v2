@@ -1,0 +1,72 @@
+{
+	"info": {
+		"_postman_id": "payment-gateway-test-doit",
+		"name": "CloudConsole Payment Gateway Test",
+		"description": "Collection for testing the doit.id payment integration",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Create TopUp",
+			"request": {
+				"method": "POST",
+				"header": [
+					{ "key": "Content-Type", "value": "application/json" }
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"amount\": 100000\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/billing/topup",
+					"host": ["{{base_url}}"],
+					"path": ["api", "billing", "topup"]
+				}
+			},
+			"description": "Creates a new payment invoice. Should return a checkoutUrl."
+		},
+		{
+			"name": "2. Webhook - INVALID Signature",
+			"request": {
+				"method": "POST",
+				"header": [
+					{ "key": "paybridge-signature", "value": "t=123,v1=fake_signature" },
+					{ "key": "Content-Type", "value": "application/json" }
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"id\": \"evt_test_123\",\n    \"type\": \"payment.paid\",\n    \"data\": {\n        \"reference\": \"topup:abc123def\",\n        \"status\": \"paid\"\n    }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/webhooks/payment",
+					"host": ["{{base_url}}"],
+					"path": ["api", "webhooks", "payment"]
+				}
+			},
+			"description": "Tries to spoof a payment. Should return 401 Unauthorized."
+		},
+		{
+			"name": "3. Sync Status (Admin)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{ "key": "Content-Type", "value": "application/json" }
+				],
+				"url": {
+					"raw": "{{base_url}}/api/admin/billing/sync-status",
+					"host": ["{{base_url}}"],
+					"path": ["api", "admin", "billing", "sync-status"]
+				}
+			},
+			"description": "Triggers the background sync to check PENDING transactions at doit.id. Requires Admin session."
+		}
+	],
+	"event": [],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000",
+			"type": "string"
+		}
+	]
+}

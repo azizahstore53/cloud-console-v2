@@ -25,6 +25,11 @@ export interface PaymentInvoiceResult {
   expiryDate: Date;
 }
 
+export interface PaymentStatusResult {
+  status: "PENDING" | "PAID" | "EXPIRED";
+  paidAt?: Date;
+}
+
 export interface WebhookPaymentEvent {
   /** Our internal reference — whatever was passed as `externalId` to createInvoice. */
   externalId: string;

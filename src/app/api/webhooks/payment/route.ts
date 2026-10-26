@@ -1,41 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPaymentGateway } from "@/lib/payment/PaymentGatewayAdapter";
 import { confirmTopUp, toTopUpGateway } from "@/lib/billing/calculator";
+import { prisma } from "@/lib/prisma";
 
 /**
  * Real payment gateway webhook endpoint. Point your gateway's callback URL
  * at: POST /api/webhooks/payment
- *
- * Signature verification and payload parsing are both delegated to the
- * active `PaymentGatewayAdapter` (see `verifyWebhookSignature` and
- * `parseWebhookPayload`) — this route doesn't hardcode any one gateway's
- * header names or payload shape, since that varies per provider.
- *
- * The signature header name itself is configurable via
- * `PAYMENT_WEBHOOK_SIGNATURE_HEADER` (defaults cover Xendit's
- * `x-callback-token`) because it varies by gateway and, for doit.id
- * specifically, is not yet confirmed — see
- * `src/lib/payment/providers/DoitPaymentGateway.ts` for why.
- *
- * Idempotency: gateways retry webhook deliveries (duplicate calls for the
- * same event are expected, not exceptional), and two retries can arrive
- * concurrently. `confirmTopUp` handles this at the database level — it
- * atomically claims the PENDING transaction exactly once, so a duplicate
- * delivery here is always a safe no-op rather than a double credit. It
- * also always uses the amount recorded when the top-up was originally
- * requested, never anything from this payload, so a forged or malformed
- * webhook body can't be used to credit an arbitrary amount.
  */
 
 export async function POST(req: NextRequest) {
   const rawBody = await req.text();
+  console.log("[PaymentWebhook] Raw Body Received:", rawBody);
+  console.log("[PaymentWebhook] Headers:", Object.fromEntries(req.headers.entries()));
 
-  const signatureHeaderName = process.env.PAYMENT_WEBHOOK_SIGNATURE_HEADER ?? "x-callback-token";
+  const signatureHeaderName = process.env.PAYMENT_WEBHOOK_SIGNATURE_HEADER ?? "paybridge-signature";
   const signature =
     req.headers.get(signatureHeaderName) ??
+    req.headers.get("paybridge-signature") ??
     req.headers.get("x-signature") ??
     req.headers.get("x-callback-token") ??
     "";
+
+  console.log(`[PaymentWebhook] Using signature header ${signatureHeaderName}: ${signature}`);
 
   const gateway = getPaymentGateway();
   if (!gateway.verifyWebhookSignature(rawBody, signature)) {
@@ -50,10 +36,31 @@ export async function POST(req: NextRequest) {
   }
 
   if (!event) {
-    // Not a payment event this route cares about — acknowledge and skip.
     return NextResponse.json({ received: true });
   }
+
   if (event.status !== "PAID") {
+    if (event.status === "EXPIRED") {
+      console.log(`\n🚀 [EVENT EXPIRED DETECTED] Processing expiration for tx: ${event.externalId}\n`);
+
+      const [, transactionId] = event.externalId.includes(":")
+        ? event.externalId.split(":")
+        : [null, event.externalId];
+
+      if (transactionId) {
+        try {
+          await prisma.transaction.update({
+            where: { id: transactionId },
+            data: { status: "EXPIRED" }
+          });
+          console.log(`✅ [PaymentWebhook] Successfully marked tx ${transactionId} as EXPIRED in DB`);
+        } catch (err) {
+          console.error(`❌ [PaymentWebhook] DB update failed for tx ${transactionId}:`, err);
+        }
+      }
+    } else {
+      console.log(`[PaymentWebhook] Received non-PAID/non-EXPIRED event: ${event.status}`);
+    }
     return NextResponse.json({ received: true });
   }
 
@@ -66,9 +73,5 @@ export async function POST(req: NextRequest) {
 
   const result = await confirmTopUp({ transactionId, gateway: toTopUpGateway(gateway.gatewayName) });
 
-  // Always acknowledge with 200 once the signature and payload are valid —
-  // "not_found" or "already_processed" aren't failures from the gateway's
-  // point of view, and returning an error here would just trigger more
-  // retries for something that isn't going to resolve differently.
   return NextResponse.json({ received: true, result: result.status });
 }

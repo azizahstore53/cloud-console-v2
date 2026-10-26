@@ -74,6 +74,7 @@ export async function chargeWallet(params: {
       throw new Error("INSUFFICIENT_BALANCE");
     }
 
+    const balanceBefore = user.balance;
     const balanceAfter = user.balance - amount;
 
     await tx.user.update({
@@ -88,6 +89,7 @@ export async function chargeWallet(params: {
         type: "USAGE_CHARGE",
         status: "SUCCESS",
         amount: -amount,
+        balanceBefore,
         balanceAfter,
         gateway: "BALANCE",
         description,
@@ -112,6 +114,7 @@ export async function creditWallet(params: {
 
   return prisma.$transaction(async (tx) => {
     const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+    const balanceBefore = user.balance;
     const balanceAfter = user.balance + amount;
 
     await tx.user.update({
@@ -125,6 +128,7 @@ export async function creditWallet(params: {
         type: "TOPUP",
         status: "SUCCESS",
         amount,
+        balanceBefore,
         balanceAfter,
         gateway,
         gatewayRef,
@@ -185,22 +189,60 @@ export async function confirmTopUp(params: {
       data: { status: "SUCCESS", gateway },
     });
     if (claim.count === 0) {
-      // Either never pending (unexpected) or already confirmed by a prior
-      // call — either way, nothing left to do.
       return { status: "already_processed" };
     }
 
-    const user = await tx.user.update({
+    const user = await tx.user.findUniqueOrThrow({ where: { id: existing.userId } });
+    const balanceBefore = user.balance;
+    const balanceAfter = user.balance + existing.amount;
+
+    await tx.user.update({
       where: { id: existing.userId },
-      data: { balance: { increment: existing.amount } },
+      data: { balance: balanceAfter },
     });
 
     await tx.transaction.update({
       where: { id: transactionId },
-      data: { balanceAfter: user.balance },
+      data: { balanceBefore, balanceAfter },
     });
 
     return { status: "confirmed", balanceAfter: user.balance, amount: existing.amount };
+  });
+}
+
+/**
+ * Refunds a user's wallet balance atomically.
+ * Used for compensating transactions when a provisioned service fails.
+ */
+export async function refundWallet(params: {
+  userId: string;
+  amount: number; // positive number to return
+  description: string;
+}) {
+  const { userId, amount, description } = params;
+
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+    const balanceBefore = user.balance;
+    const balanceAfter = user.balance + amount;
+
+    await tx.user.update({
+      where: { id: userId },
+      data: { balance: balanceAfter },
+    });
+
+    return tx.transaction.create({
+      data: {
+        userId,
+        type: "REFUND",
+        status: "SUCCESS",
+        amount,
+        balanceBefore,
+        balanceAfter,
+        gateway: "BALANCE",
+        description,
+      },
+    });
   });
 }
 
