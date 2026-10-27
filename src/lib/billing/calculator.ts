@@ -56,6 +56,33 @@ export function estimateMonthlyCost(pricing: PlanPricing, cycle: BillingCycle): 
 }
 
 /**
+ * Trigger a low balance notification if the user's balance falls below the threshold.
+ * To avoid spamming, we only notify if the balance was previously above the threshold
+ * or if this is the first time it's falling below.
+ */
+async function checkAndNotifyLowBalance(userId: string, balanceBefore: number, balanceAfter: number) {
+  const LOW_BALANCE_THRESHOLD = 10000;
+
+  // Only notify if the balance actually crossed the threshold downwards
+  if (balanceBefore > LOW_BALANCE_THRESHOLD && balanceAfter <= LOW_BALANCE_THRESHOLD) {
+    try {
+      await prisma.notification.create({
+        data: {
+          userId,
+          title: "Low Balance Warning",
+          message: `Your wallet balance is running low (IDR ${balanceAfter.toLocaleString()}). Please top up to avoid service interruption.`,
+          type: "BILLING",
+          isRead: false,
+        },
+      });
+      console.log(`[Billing] Low balance notification created for user ${userId}`);
+    } catch (error) {
+      console.error("[Billing] Failed to create low balance notification:", error);
+    }
+  }
+}
+
+/**
  * Charge a user's wallet balance, writing a Transaction row atomically.
  * Throws if the balance would go negative (prepaid model — no overdraft).
  */
@@ -82,7 +109,7 @@ export async function chargeWallet(params: {
       data: { balance: balanceAfter },
     });
 
-    return tx.transaction.create({
+    const transaction = await tx.transaction.create({
       data: {
         userId,
         invoiceId,
@@ -95,6 +122,11 @@ export async function chargeWallet(params: {
         description,
       },
     });
+
+    // Trigger low balance check after the transaction is recorded
+    await checkAndNotifyLowBalance(userId, balanceBefore, balanceAfter);
+
+    return transaction;
   });
 }
 

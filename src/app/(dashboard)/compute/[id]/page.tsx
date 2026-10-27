@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useInstance, useInstanceAction } from "@/hooks/useInstances";
@@ -13,9 +13,11 @@ import {
 } from "@/components/ui/dialog";
 import {
   ArrowLeft, Play, Square, RotateCw, Trash2, Monitor, Cpu, MemoryStick,
-  HardDrive, MapPin, Loader2,
+  HardDrive, MapPin, Loader2, Clock
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { format } from "date-fns";
 
 export default function InstanceDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -23,6 +25,25 @@ export default function InstanceDetailPage() {
   const { data, isLoading } = useInstance(id);
   const action = useInstanceAction(id);
   const [confirmTerminate, setConfirmTerminate] = useState(false);
+  const [activityLogs, setActivityLogs] = useState<any[]>([]);
+  const [logsLoading, setLogsLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchActivity() {
+      try {
+        const res = await fetch(`/api/instances/${id}/activity`);
+        if (res.ok) {
+          const data = await res.json();
+          setActivityLogs(data.logs);
+        }
+      } catch (error) {
+        console.error("Error fetching activity logs:", error);
+      } finally {
+        setLogsLoading(false);
+      }
+    }
+    if (id) fetchActivity();
+  }, [id]);
 
   if (isLoading) {
     return (
@@ -55,7 +76,15 @@ export default function InstanceDetailPage() {
         <div className="flex-1">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-semibold tracking-tight">{instance.name}</h1>
-            <InstanceStatusBadge status={instance.status} />
+            <div className="relative">
+              <InstanceStatusBadge status={instance.status} />
+              {isTransitioning && (
+                <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                </span>
+              )}
+            </div>
           </div>
           <p className="text-muted-foreground text-sm font-mono mt-0.5">{instance.ipv4Address ?? "IP pending..."}</p>
         </div>
@@ -71,6 +100,7 @@ export default function InstanceDetailPage() {
             disabled={instance.status === "RUNNING" || isTransitioning}
             onClick={() => action.mutate("START")}
           >
+            {isTransitioning && instance.status === "PROVISIONING" && <Loader2 className="h-4 w-4 animate-spin" />}
             <Play className="h-4 w-4" /> Start
           </Button>
           <Button
@@ -80,6 +110,7 @@ export default function InstanceDetailPage() {
             disabled={instance.status !== "RUNNING" || isTransitioning}
             onClick={() => action.mutate("STOP")}
           >
+            {isTransitioning && instance.status === "TERMINATING" && <Loader2 className="h-4 w-4 animate-spin" />}
             <Square className="h-4 w-4" /> Stop
           </Button>
           <Button
@@ -89,6 +120,7 @@ export default function InstanceDetailPage() {
             disabled={instance.status !== "RUNNING" || isTransitioning}
             onClick={() => action.mutate("REBOOT")}
           >
+            {isTransitioning && instance.status === "REBOOTING" && <Loader2 className="h-4 w-4 animate-spin" />}
             <RotateCw className="h-4 w-4" /> Reboot
           </Button>
           <Button variant="outline" size="sm" className="gap-2" disabled={instance.status !== "RUNNING"}>
@@ -102,6 +134,7 @@ export default function InstanceDetailPage() {
             disabled={instance.status === "TERMINATED" || isTransitioning}
             onClick={() => setConfirmTerminate(true)}
           >
+            {isTransitioning && instance.status === "TERMINATING" && <Loader2 className="h-4 w-4 animate-spin" />}
             <Trash2 className="h-4 w-4" /> Terminate
           </Button>
         </CardContent>
@@ -160,8 +193,48 @@ export default function InstanceDetailPage() {
 
         <TabsContent value="activity">
           <Card>
-            <CardContent className="py-8 text-center text-sm text-muted-foreground">
-              Activity log for this instance appears here.
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-32">Date</TableHead>
+                    <TableHead>Event</TableHead>
+                    <TableHead>Details</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {logsLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+                      </TableCell>
+                    </TableRow>
+                  ) : activityLogs.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
+                        No activity logs found for this instance.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    activityLogs.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {format(new Date(log.createdAt), "d MMM HH:mm")}
+                        </TableCell>
+                        <TableCell className="font-medium text-sm">
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-3 w-3 text-muted-foreground" />
+                            {log.action.replace("instance.", "").toUpperCase()}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {log.message}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>

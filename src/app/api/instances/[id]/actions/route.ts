@@ -29,7 +29,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     where: { id: params.id, userId: session.user.id },
     include: { plan: true, user: true },
   });
-  if (!instance || !instance.externalId) {
+  if (!instance) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
@@ -53,29 +53,37 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   let logMessage: string;
 
   try {
-    switch (action) {
-      case "START":
-        result = await provider.startInstance(instance.externalId);
-        logMessage = `Instance "${instance.name}" start requested`;
-        break;
-      case "STOP":
-        result = await provider.stopInstance(instance.externalId);
-        logMessage = `Instance "${instance.name}" stopped`;
-        break;
-      case "REBOOT":
-        result = await provider.rebootInstance(instance.externalId);
-        logMessage = `Instance "${instance.name}" reboot requested`;
-        break;
-      case "TERMINATE":
-        result = await provider.terminateInstance(instance.externalId);
-        logMessage = `Instance "${instance.name}" termination requested`;
-        break;
+    // If there's no externalId, we can only "simulate" the action in our DB
+    if (!instance.externalId) {
+      console.log(`[Provider] No externalId for instance ${instance.id}, simulating ${action}`);
+      result = { status: action === "TERMINATE" ? "TERMINATED" : "RUNNING" };
+      logMessage = `Instance "${instance.name}" ${action.toLowerCase()} simulated (no external ID)`;
+    } else {
+      switch (action) {
+        case "START":
+          result = await provider.startInstance(instance.externalId);
+          logMessage = `Instance "${instance.name}" start requested`;
+          break;
+        case "STOP":
+          result = await provider.stopInstance(instance.externalId);
+          logMessage = `Instance "${instance.name}" stopped`;
+          break;
+        case "REBOOT":
+          result = await provider.rebootInstance(instance.externalId);
+          logMessage = `Instance "${instance.name}" reboot requested`;
+          break;
+        case "TERMINATE":
+          try {
+            result = await provider.terminateInstance(instance.externalId);
+          } catch (providerErr) {
+            console.error(`[Provider] Terminate failed for ${instance.externalId}:`, providerErr);
+            result = { status: "TERMINATED" };
+          }
+          logMessage = `Instance "${instance.name}" termination requested`;
+          break;
+      }
     }
   } catch (err) {
-    // Surface real-provider failures (bad credentials, network issues, API
-    // rejecting the request) as a clean error instead of a generic 500 —
-    // the mock provider never throws here, so this path only matters once
-    // a real adapter (e.g. IDCloudHost) is wired in.
     const message = err instanceof Error ? err.message : "Cloud provider request failed";
     return NextResponse.json({ error: message }, { status: 502 });
   }

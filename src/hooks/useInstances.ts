@@ -66,11 +66,45 @@ export function useInstanceAction(id: string) {
         method: "POST",
         body: JSON.stringify({ action }),
       }),
+    onMutate: async (action) => {
+      // Cancel outgoing refetches (so they don't overwrite our optimistic update)
+      await qc.cancelQueries({ queryKey: ["instances", id] });
+
+      // Snapshot the previous value
+      const previousInstance = qc.getQueryData<InstanceWithRelations>(["instances", id]);
+
+      // Optimistically update to a transitioning state
+      // Note: We don't have the full InstanceWithRelations type here, but we can update the status
+      qc.setQueryData(["instances", id], (old: any) => {
+        if (!old) return old;
+        const statusMap: Record<string, string> = {
+          START: "PROVISIONING", // Or a custom 'STARTING' if the API supports it
+          STOP: "STOPPED",
+          REBOOT: "REBOOTING",
+          TERMINATE: "TERMINATING",
+        };
+        return {
+          ...old,
+          instance: {
+            ...old.instance,
+            status: statusMap[action] || old.instance.status
+          },
+        };
+      });
+
+      return { previousInstance };
+    },
     onSuccess: (_data, action) => {
       qc.invalidateQueries({ queryKey: ["instances"] });
       qc.invalidateQueries({ queryKey: ["instances", id] });
       toast.success(`Action "${action.toLowerCase()}" sent`);
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error, _variables, context) => {
+      // Rollback to previous state on error
+      if (context?.previousInstance) {
+        qc.setQueryData(["instances", id], context.previousInstance);
+      }
+      toast.error(err.message);
+    },
   });
 }

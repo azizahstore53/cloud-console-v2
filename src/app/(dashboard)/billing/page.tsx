@@ -4,8 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/billing/calculator";
 import { TopUpDialog } from "@/components/billing/TopUpDialog";
-import { Wallet, ArrowDownLeft, ArrowUpRight, CreditCard, History } from "lucide-react";
-import { format } from "date-fns";
+import { Wallet, ArrowDownLeft, ArrowUpRight, CreditCard, History, PieChart, Server, ShieldCheck } from "lucide-react";
+import { format, startOfMonth, endOfMonth } from "date-fns";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
@@ -20,6 +20,41 @@ export default async function BillingPage() {
   ]);
 
   const pendingPayments = transactions.filter(tx => tx.status === "PENDING");
+
+  const monthStart = startOfMonth(new Date());
+  const monthEnd = endOfMonth(new Date());
+
+  const monthlyUsage = await prisma.transaction.aggregate({
+    where: {
+      userId,
+      createdAt: { gte: monthStart, lte: monthEnd },
+      status: "SUCCESS",
+      type: { not: "TOPUP" },
+    },
+    _sum: { amount: true },
+  });
+
+  const allMonthlyTxs = await prisma.transaction.findMany({
+    where: {
+      userId,
+      createdAt: { gte: monthStart, lte: monthEnd },
+      status: "SUCCESS",
+      type: { not: "TOPUP" },
+    },
+  });
+
+  const spending = {
+    compute: allMonthlyTxs
+      .filter(tx => tx.description?.toLowerCase().includes("instance") || tx.type === "USAGE_CHARGE")
+      .reduce((sum, tx) => sum + Math.abs(tx.amount), 0),
+    vpn: allMonthlyTxs
+      .filter(tx => tx.description?.toLowerCase().includes("vpn"))
+      .reduce((sum, tx) => sum + Math.abs(tx.amount), 0),
+    others: 0,
+  };
+
+  const totalSpent = Math.abs(monthlyUsage._sum.amount ?? 0);
+  spending.others = totalSpent - (spending.compute + spending.vpn);
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -46,6 +81,42 @@ export default async function BillingPage() {
           <TopUpDialog />
         </CardContent>
       </Card>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+              <Server className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Compute</p>
+              <p className="text-sm font-bold">{formatCurrency(spending.compute)}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">VPN</p>
+              <p className="text-sm font-bold">{formatCurrency(spending.vpn)}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-900/30 dark:text-slate-400">
+              <PieChart className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Total Spent (Month)</p>
+              <p className="text-sm font-bold">{formatCurrency(totalSpent)}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {pendingPayments.length > 0 && (
         <Card className="border-orange-500/50 bg-orange-50/30 dark:bg-orange-900/10">
