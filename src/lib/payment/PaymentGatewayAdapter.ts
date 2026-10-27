@@ -99,9 +99,16 @@ export function getPaymentGateway(): PaymentGatewayAdapter {
   const key = process.env.PAYMENT_GATEWAY ?? "mock";
   switch (key) {
     case "doit":
+      const secret = process.env.DOIT_WEBHOOK_SECRET;
+      if (!secret) {
+        console.warn(
+          "⚠️ [PaymentGateway] DOIT_WEBHOOK_SECRET is not set in environment variables. " +
+          "Webhook signatures will fail, and payments won't be automatically confirmed."
+        );
+      }
       cached = new DoitPaymentGateway({
         apiKey: process.env.DOIT_API_KEY ?? "",
-        webhookSecret: process.env.DOIT_WEBHOOK_SECRET || undefined,
+        webhookSecret: secret || undefined,
       });
       break;
     case "mock":
