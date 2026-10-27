@@ -34,20 +34,23 @@ const NAV_ITEMS = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function Sidebar({ role }: { role?: Role }) {
+export function Sidebar({ role, isOpen }: { role?: Role; isOpen?: boolean }) {
   const pathname = usePathname();
   const { data: badge } = useSupportBadge();
 
   return (
-    <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 border-r bg-card">
-      <div className="flex items-center gap-2 px-6 h-16 border-b">
+    <aside className={cn(
+      "hidden md:flex md:flex-col md:fixed md:inset-y-0 border-r bg-card transition-all duration-300 ease-in-out z-40",
+      isOpen ? "md:w-64 translate-x-0" : "md:w-0 -translate-x-full overflow-hidden"
+    )}>
+      <div className={cn("flex items-center gap-2 px-6 h-16 border-b whitespace-nowrap", !isOpen && "opacity-0")}>
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
           <Cloud className="h-4.5 w-4.5" />
         </div>
         <span className="font-semibold text-lg tracking-tight">CloudConsole</span>
       </div>
 
-      <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
+      <nav className={cn("flex-1 space-y-1 px-3 py-4 overflow-y-auto overflow-x-hidden", !isOpen && "opacity-0")}>
         {NAV_ITEMS.map((item) => {
           const active = pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;
@@ -56,7 +59,7 @@ export function Sidebar({ role }: { role?: Role }) {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap",
                 active
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -75,13 +78,13 @@ export function Sidebar({ role }: { role?: Role }) {
 
         {role && isStaff(role) && (
           <>
-            <div className="pt-3 pb-1 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
+            <div className="pt-3 pb-1 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 whitespace-nowrap">
               Administration
             </div>
             <Link
               href="/admin"
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap",
                 pathname === "/admin" || pathname.startsWith("/admin/")
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -94,7 +97,7 @@ export function Sidebar({ role }: { role?: Role }) {
         )}
       </nav>
 
-      <div className="p-4 border-t">
+      <div className={cn("p-4 border-t whitespace-nowrap", !isOpen && "opacity-0")}>
         <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
           <p className="font-medium text-foreground mb-1">Region</p>
           <p>Jakarta 1 (id-jkt-1)</p>

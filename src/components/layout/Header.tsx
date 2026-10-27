@@ -15,11 +15,29 @@ import { SignOutButton } from "@/components/auth/SignOutButton";
 import { isStaff } from "@/lib/permissions";
 import type { SessionUser } from "@/types";
 
-export function Header({ user, balance }: { user: SessionUser; balance: number }) {
+export function Header({
+  user,
+  balance,
+  onToggleSidebar,
+  isSidebarOpen
+}: {
+  user: SessionUser;
+  balance: number;
+  onToggleSidebar?: () => void;
+  isSidebarOpen?: boolean;
+}) {
   const initials = (user.name ?? user.email ?? "U").slice(0, 2).toUpperCase();
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background/95 backdrop-blur px-4 md:px-6">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="hidden md:flex"
+        onClick={onToggleSidebar}
+      >
+        <Menu className="h-5 w-5" />
+      </Button>
       <Button variant="ghost" size="icon" className="md:hidden">
         <Menu className="h-5 w-5" />
       </Button>

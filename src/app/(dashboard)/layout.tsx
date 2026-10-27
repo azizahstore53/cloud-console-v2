@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
+import { DashboardClientWrapper } from "@/components/layout/DashboardClientWrapper";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -14,12 +13,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
   });
 
   return (
-    <div className="min-h-screen bg-muted/30">
-      <Sidebar role={session.user.role} />
-      <div className="md:pl-64 flex flex-col min-h-screen">
-        <Header user={session.user} balance={user?.balance ?? 0} />
-        <main className="flex-1 p-4 md:p-8 max-w-[1600px] w-full mx-auto">{children}</main>
-      </div>
-    </div>
+    <DashboardClientWrapper
+      user={session.user}
+      balance={user?.balance ?? 0}
+      role={session.user.role}
+    >
+      {children}
+    </DashboardClientWrapper>
   );
 }
