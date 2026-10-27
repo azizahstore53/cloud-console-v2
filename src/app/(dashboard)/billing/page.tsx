@@ -4,9 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/billing/calculator";
 import { TopUpDialog } from "@/components/billing/TopUpDialog";
-import { Wallet, ArrowDownLeft, ArrowUpRight, CreditCard } from "lucide-react";
+import { Wallet, ArrowDownLeft, ArrowUpRight, CreditCard, History } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export default async function BillingPage() {
   const session = await auth();
@@ -27,6 +28,11 @@ export default async function BillingPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Billing &amp; Wallet</h1>
           <p className="text-muted-foreground text-sm mt-1">Manage your prepaid balance, invoices, and payment history.</p>
         </div>
+        <Link href="/billing/history">
+          <Button variant="outline" size="sm" className="gap-2">
+            <History className="h-4 w-4" /> View Full History
+          </Button>
+        </Link>
       </div>
 
       <Card className="bg-gradient-to-br from-primary to-primary/70 text-primary-foreground border-0">
@@ -81,7 +87,12 @@ export default async function BillingPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader><CardTitle className="text-base">Transaction History</CardTitle></CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">Recent Transactions</CardTitle>
+            <Link href="/billing/history">
+              <Button variant="ghost" size="sm" className="h-8 text-xs">View All</Button>
+            </Link>
+          </CardHeader>
           <CardContent className="space-y-1">
             {transactions.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-8">No transactions yet.</p>
@@ -110,7 +121,12 @@ export default async function BillingPage() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="text-base">Invoices</CardTitle></CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">Recent Invoices</CardTitle>
+            <Link href="/billing/history">
+              <Button variant="ghost" size="sm" className="h-8 text-xs">View All</Button>
+            </Link>
+          </CardHeader>
           <CardContent className="space-y-1">
             {invoices.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-8">No invoices yet.</p>

@@ -1,28 +1,35 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
-    const { searchParams } = new URL(req.url);
-    const status = searchParams.get("status");
-
     const transactions = await prisma.transaction.findMany({
-      where: {
-        userId: session.user.id,
-        ...(status ? { status: status as any } : {}),
-      },
-      orderBy: {
-        createdAt: "desc",
+      where: { userId: session.user.id },
+      orderBy: { createdAt: "desc" },
+      include: {
+        invoice: {
+          select: {
+            id: true,
+          },
+        },
       },
     });
 
-    return NextResponse.json(transactions);
-  } catch (error) {
-    console.error("[TransactionsAPI] Error:", error);
+    // Transform to ensure invoiceId is always present if an invoice exists
+    const result = transactions.map(tx => ({
+      ...tx,
+      invoiceId: tx.invoice?.id || tx.invoiceId,
+    }));
+
+    return NextResponse.json(result);
+  } catch (error: any) {
+    console.error("[Billing API] Transaction Fetch Error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

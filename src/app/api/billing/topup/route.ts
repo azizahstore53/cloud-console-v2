@@ -20,10 +20,25 @@ export async function POST(req: NextRequest) {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: session.user.id } });
   const gateway = getPaymentGateway();
 
-  // Create a PENDING transaction first, then hand off to the payment gateway.
+  // Create a local Invoice first for record-keeping
+  const invoiceNumber = `INV-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  const invoice = await prisma.invoice.create({
+    data: {
+      userId: user.id,
+      invoiceNumber,
+      status: "PENDING",
+      subtotal: amount,
+      total: amount,
+      dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
+      currency: user.currency,
+    },
+  });
+
+  // Create a PENDING transaction linked to the invoice
   const transaction = await prisma.transaction.create({
     data: {
       userId: user.id,
+      invoiceId: invoice.id,
       type: "TOPUP",
       status: "PENDING",
       amount,
@@ -33,7 +48,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const invoice = await gateway.createInvoice({
+  const gatewayInvoice = await gateway.createInvoice({
     externalId: `topup:${transaction.id}`,
     amount,
     payerEmail: user.email,
@@ -43,10 +58,10 @@ export async function POST(req: NextRequest) {
   await prisma.transaction.update({
     where: { id: transaction.id },
     data: {
-      gatewayRef: invoice.id,
-      paymentUrl: invoice.invoiceUrl
+      gatewayRef: gatewayInvoice.id,
+      paymentUrl: gatewayInvoice.invoiceUrl
     },
   });
 
-  return NextResponse.json({ checkoutUrl: invoice.invoiceUrl, transactionId: transaction.id });
+  return NextResponse.json({ checkoutUrl: gatewayInvoice.invoiceUrl, transactionId: transaction.id });
 }

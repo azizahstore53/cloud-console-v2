@@ -203,8 +203,22 @@ export async function confirmTopUp(params: {
 
     await tx.transaction.update({
       where: { id: transactionId },
-      data: { balanceBefore, balanceAfter },
+      data: {
+        balanceBefore,
+        balanceAfter
+      },
     });
+
+    // Mark associated invoice as PAID if it exists
+    if (existing.invoiceId) {
+      await tx.invoice.update({
+        where: { id: existing.invoiceId },
+        data: {
+          status: "PAID",
+          paidAt: new Date()
+        },
+      });
+    }
 
     return { status: "confirmed", balanceAfter: user.balance, amount: existing.amount };
   });

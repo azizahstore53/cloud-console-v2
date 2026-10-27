@@ -11,30 +11,34 @@
 
 ### Phase 1: Foundation (The Basics) - [DONE]
 - [x] RBAC & Security Guard.
-- [x] VPN Provisioning System.
+- [x] VPN Provisioning System (WireGuard).
+- [x] Multi-Port Forwarding (Public $\rightarrow$ Local).
 - [x] QR Code Config Generator.
-- [x] Billing Audit Trail.
-- [x] Automated Health Check.
+- [x] Billing Audit Trail (Balance Tracking).
+- [x] Automated Health Check & Admin Notifications.
+- [x] Input Validation (Zod) & API Rate Limiting.
+- [x] Professional PDF Invoice Generation.
+- [x] Enterprise Landing Page (DevCloudhost).
 
-### Phase 2: Flexibility & Scaling (Current Phase)
-- [ ] **Multi-Port Forwarding:** Satu tunnel dapat meneruskan banyak port (contoh: 80, 443, 3306, 8080) ke berbagai server internal.
-- [ ] **Static IP Allocation:** IP Publik tetap (Fixed IP) untuk kebutuhan whitelisting API/Integrasi.
-- [ ] **Custom DNS/Domain Integration:** Menghubungkan IP Publik dengan domain kustom.
-- [ ] **Simple Connectivity Dashboard:** Monitoring status tunnel secara real-time untuk pengguna.
+### Phase 2: Growth & Scaling (Current Focus)
+- [ ] **Traffic Analytics:** Dashboard visual penggunaan bandwidth (Real-time/Harian).
+- [ ] **Recurring Billing:** Sistem langganan otomatis (Monthly/Yearly) vs Top-up manual.
+- [ ] **Static IP Management:** UI untuk manajemen dan penguncian IP Publik tetap bagi klien premium.
+- [ ] **Simple Connectivity Dashboard:** Halaman status tunnel khusus untuk user (SLA Monitoring).
 
 ### Phase 3: Enterprise & Reliability
-- [ ] **High Availability (Failover):** Dual-tunnel redundancy untuk menjamin uptime 99.9%.
-- [ ] **SSL/TLS Termination (Reverse Proxy):** Integrasi HTTPS agar akses lebih aman dan profesional.
-- [ ] **Bandwidth Management:** Implementasi QoS (Quality of Service) dan limitasi bandwidth per user.
-- [ ] **Advanced Firewall:** Kontrol akses IP (IP Whitelisting) untuk port yang dibuka.
+- [ ] **High Availability (Failover):** Implementasi dual-tunnel untuk redundancy (Automatic failover).
+- [ ] **SSL/TLS Termination:** Integrasi Reverse Proxy untuk dukungan domain kustom dan HTTPS.
+- [ ] **Bandwidth Management:** Limitasi kecepatan (QoS) per tunnel untuk stabilitas gateway.
+- [ ] **Advanced Firewall:** Fitur IP Whitelisting untuk membatasi siapa yang bisa akses port publik.
 
 ### Phase 4: Ecosystem & Monetization
-- [ ] **Flexible Billing Model:** Mendukung Top-up (Retail) dan Contract-Based (B2B/Enterprise).
-- [ ] **SLA Monitoring:** Dashboard transparansi uptime untuk klien korporat.
-- [ ] **Managed Setup Service:** Fitur bantuan konfigurasi otomatis untuk klien non-teknis.
+- [ ] **B2B Contract Billing:** Sistem penagihan berbasis kontrak tahunan dengan invoice otomatis.
+- [ ] **SLA Reporting:** Laporan uptime bulanan otomatis untuk klien korporat.
+- [ ] **Managed Setup Module:** Tools untuk membantu konfigurasi remote server klien secara semi-otomatis.
 
 ## 🛠 Technical Architecture
 - **Core:** WireGuard (Fast, Modern, & Secure).
 - **Orchestration:** Next.js + Prisma + PostgreSQL.
 - **Gateway:** Linux VPS with optimized IP tables for DNAT.
-- **Security:** End-to-end encryption, RBAC, and SSH Key-based management.
+- **Security:** End-to-end encryption, RBAC, Zod Validation, and Rate Limiting.
