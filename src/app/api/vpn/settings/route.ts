@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
 import { vpnService } from "@/lib/vpn/vpnService";
 import { prisma } from "@/lib/prisma";
 import { EncryptionService } from "@/lib/encryption";
 
 export async function GET() {
+  const session = await auth();
+
+  // Only ADMIN or SUPER_ADMIN can view VPN settings
+  if (!session?.user || !["SUPER_ADMIN", "ADMIN"].includes(session.user.role)) {
+    return NextResponse.json({ error: "Unauthorized: Administrator access required" }, { status: 403 });
+  }
+
   try {
     const server = await prisma.vpnServer.findFirst({
       where: { isActive: true },
@@ -18,8 +26,6 @@ export async function GET() {
       publicIp: server.publicIp,
       sshUser: server.sshUser,
       wireguardPort: server.wireguardPort,
-      // We don't send passwords/keys back to the frontend for security,
-      // but we could send a flag saying they are configured.
       hasPassword: !!server.sshPassword,
       hasPrivateKey: !!server.sshPrivateKey,
     });
@@ -29,6 +35,13 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await auth();
+
+  // Only ADMIN or SUPER_ADMIN can update VPN settings
+  if (!session?.user || !["SUPER_ADMIN", "ADMIN"].includes(session.user.role)) {
+    return NextResponse.json({ error: "Unauthorized: Administrator access required" }, { status: 403 });
+  }
+
   try {
     const body = await req.json();
     const { name, publicIp, sshUser, sshPassword, sshPrivateKey, wireguardPort } = body;
@@ -53,7 +66,6 @@ export async function POST(req: NextRequest) {
         sshPassword,
         sshPrivateKey: encryptedSshKey,
         wireguardPort,
-        // These are required but will be filled by provisioning
         publicKey: "pending",
         privateKey: "pending",
       },

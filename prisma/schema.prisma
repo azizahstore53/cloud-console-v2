@@ -119,10 +119,12 @@ enum ActivityCategory {
 }
 
 enum VpnStatus {
+  PROVISIONING
   ACTIVE
   INACTIVE
   EXPIRED
   SUSPENDED
+  FAILED
 }
 
 // ----------------------------------------------------------------------------

@@ -6,6 +6,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { chargeWallet, refundWallet } from "../billing/calculator";
+import { VpnHealthService } from "./healthService";
 
 export interface VpnConfig {
   address: string;
@@ -307,30 +308,29 @@ PostDown = iptables -t nat -D POSTROUTING -o ${defaultInterface} -j MASQUERADE`;
       where: { isActive: true },
     });
 
-    const downServers: string[] = [];
-    const details: any[] = [];
+    const results = await VpnHealthService.checkAllServers(
+      servers.map(s => ({
+        id: s.id,
+        publicIp: s.publicIp,
+        name: s.name,
+        wireguardPort: s.wireguardPort
+      }))
+    );
 
-    for (const server of servers) {
-      const sshConfig: VpnConfig = {
-        address: server.publicIp,
-        port: 22,
-        username: server.sshUser || "root",
-        privateKey: server.sshPrivateKey,
-        password: server.sshPassword,
-      };
+    const downServers = results
+      .filter(r => r.status === "OFFLINE")
+      .map(r => r.ip);
 
-      try {
-        const conn = await this.getSshClient(sshConfig);
-        conn.end();
-        details.push({ ip: server.publicIp, status: "UP" });
-      } catch (err: any) {
-        console.error(`[HealthCheck] Server ${server.publicIp} is DOWN: ${err.message}`);
-        downServers.push(server.publicIp);
-        details.push({ ip: server.publicIp, status: "DOWN", error: err.message });
-      }
-    }
-
-    return { downServers, details };
+    return {
+      downServers,
+      details: results.map(r => ({
+        ip: r.ip,
+        name: r.name,
+        status: r.status === "ONLINE" ? "UP" : "DOWN",
+        latency: r.latency,
+        error: r.error
+      }))
+    };
   }
   private async verifyResourcesAvailable() {
     const [server, publicIp, internalIp] = await Promise.all([
@@ -514,9 +514,7 @@ PostDown = iptables -t nat -D POSTROUTING -o ${defaultInterface} -j MASQUERADE`;
     }
   }
 
-  // src/lib/vpn/vpnService.ts
-
-async revokeVpnClient(clientId: string) {
+  async revokeVpnClient(clientId: string) {
   const client = await prisma.vpnClient.findUnique({
     where: { id: clientId },
     include: { vpnServer: true }
