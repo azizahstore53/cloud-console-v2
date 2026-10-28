@@ -1,0 +1,81 @@
+# VPS Infrastructure Specifications for Cloud Console
+
+This document outlines the hardware and software requirements for the servers used as "Compute Nodes" (the physical servers that host the user's virtual instances) and the "VPN Gateways".
+
+## 1. Recommended Server Specifications
+
+Since you are starting with a limited budget, I recommend a **Hybrid Approach**: starting with a high-value mid-range server and scaling horizontally.
+
+### A. Entry-Level Node (Budget Friendly)
+*Best for: Small group of users, basic VPNs, and lightweight App Deployments.*
+- **CPU:** 4 vCPU / 8 Cores (AMD EPYC or Intel Xeon)
+- **RAM:** 16 GB - 32 GB DDR4
+- **Storage:** 250 GB - 500 GB NVMe SSD (Crucial for Disk I/O performance)
+- **Network:** 1 Gbps Port / 1-5 TB Monthly Transfer
+- **OS:** Ubuntu 22.04 LTS (Recommended)
+
+### B. Mid-Range Node (Performance)
+*Best for: Commercial use, medium-sized WordPress sites, and high-traffic VPNs.*
+- **CPU:** 8 vCPU / 16 Cores
+- **RAM:** 64 GB DDR4
+- **Storage:** 1 TB NVMe SSD
+- **Network:** 1 Gbps Port / 10-20 TB Monthly Transfer
+- **OS:** Ubuntu 22.04 LTS
+
+---
+
+## 2. Software Stack Requirements
+
+To make the "App Deployer" and "VPN Tunneling" work, each server must have:
+
+### Core System
+- **Virtualization:** KVM / QEMU (For creating isolated VPS instances)
+- **Containerization:** Docker & Docker Compose (Essential for the App Deployer to launch apps quickly)
+- **Remote Management:** OpenSSH Server (configured for Key-based auth)
+
+### VPN Stack (for VPN Gateways)
+- **VPN Protocol:** WireGuard (Fastest, most modern, and lightweight)
+- **Control Plane:** A management agent (written in Go/Node.js) to handle user creation and port mapping.
+
+### App Deployer Stack
+- **Execution Engine:** Bash / Ansible (to automate the installation of WordPress, Panel, etc.)
+- **Web Server:** Nginx / Apache (as reverse proxy for deployed apps)
+
+---
+
+## 3. Step-by-Step Setup Guide (The "Master" Setup)
+
+Follow these steps to prepare your server to be connected to the Cloud Console:
+
+### Step 1: Base OS Installation
+1. Install **Ubuntu 22.04 LTS** on your server.
+2. Update all packages: `sudo apt update && sudo apt upgrade -y`.
+
+### Step 2: Security Hardening
+1. **Create a Management User:** Avoid using `root` directly.
+2. **SSH Key Auth:** Disable password login and use SSH Keys only.
+3. **Firewall (UFW):**
+   - Open Port 22 (SSH)
+   - Open Port 80/443 (HTTP/S)
+   - Open the range of ports used for VPN (e.g., 10000-20000).
+
+### Step 3: Install Required Dependencies
+Run this command to install the basics for the App Deployer and VPN:
+```bash
+sudo apt install -y curl wget git docker.io docker-compose wireguard
+sudo systemctl enable --now docker
+sudo systemctl enable --now wireguard
+```
+
+### Step 4: Connecting to Cloud Console
+1. Go to your **Admin Panel** $\rightarrow$ **VPN Gateway Management**.
+2. Add the server's **Public IP**.
+3. Input the **Private Key** and **Public Key** (generated during WireGuard setup).
+4. Input the **SSH Private Key** so the console can automatically run the "App Deployer" scripts.
+
+---
+
+## 4. Cost Optimization Tips
+- **Use NVMe:** Don't compromise on SSD. Disk I/O is the biggest bottleneck for VPS.
+- **Over-provisioning:** You can sell slightly more RAM than you have (e.g., selling 10GB RAM to a user who only uses 2GB), but be careful with CPU.
+- **Strategic Location:** Choose servers in Singapore (SG) or Jakarta (ID) for the lowest latency for Indonesian users.

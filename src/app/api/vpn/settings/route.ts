@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { vpnService } from "@/lib/vpn/vpnService";
 import { prisma } from "@/lib/prisma";
+import { EncryptionService } from "@/lib/encryption";
 
 export async function GET() {
   try {
@@ -32,13 +33,17 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { name, publicIp, sshUser, sshPassword, sshPrivateKey, wireguardPort } = body;
 
+    const encryptedSshKey = sshPrivateKey
+      ? EncryptionService.encrypt(sshPrivateKey)
+      : null;
+
     const server = await prisma.vpnServer.upsert({
       where: { publicIp },
       update: {
         name,
         sshUser,
         sshPassword,
-        sshPrivateKey,
+        sshPrivateKey: encryptedSshKey,
         wireguardPort,
       },
       create: {
@@ -46,7 +51,7 @@ export async function POST(req: NextRequest) {
         publicIp,
         sshUser,
         sshPassword,
-        sshPrivateKey,
+        sshPrivateKey: encryptedSshKey,
         wireguardPort,
         // These are required but will be filled by provisioning
         publicKey: "pending",
