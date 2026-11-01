@@ -1,0 +1,327 @@
+<title>Panduan Setup CloudConsole</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /*
+    Design Plan:
+    Subject: Technical Deployment Guide for CloudConsole
+    Audience: System Administrator / Developer
+    Treatment: Utilitarian, high-contrast "Developer Docs" aesthetic.
+    Palette: Deep slate neutrals with a vibrant "Electric Indigo" accent to signify modern cloud tech.
+    Typography: System-sans for body, Monospace for commands, and a bold geometric sans for headings.
+  */
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --surface: #f8fafc;
+    --border: #e2e8f0;
+    --accent: #6366f1;
+    --accent-soft: #eef2ff;
+    --code-bg: #1e293b;
+    --code-fg: #f8fafc;
+    --text-muted: #64748b;
+
+    --font-main: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Source Code Pro', monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f172a;
+      --fg: #f1f5f9;
+      --surface: #1e293b;
+      --border: #334155;
+      --accent: #818cf8;
+      --accent-soft: #1e1b4b;
+      --code-bg: #000000;
+      --code-fg: #e2e8f0;
+      --text-muted: #94a3b8;
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #0f172a;
+    --fg: #f1f5f9;
+    --surface: #1e293b;
+    --border: #334155;
+    --accent: #818cf8;
+    --accent-soft: #1e1b4b;
+    --code-bg: #000000;
+    --code-fg: #e2e8f0;
+    --text-muted: #94a3b8;
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-main);
+    line-height: 1.6;
+    margin: 0;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 2rem;
+  }
+
+  .container {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  header {
+    margin-bottom: 3rem;
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 1.5rem;
+  }
+
+  h1 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin: 0 0 0.5rem 0;
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+  }
+
+  .subtitle {
+    color: var(--text-muted);
+    font-size: 1.1rem;
+  }
+
+  .section {
+    margin-bottom: 3rem;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    color: var(--fg);
+  }
+
+  .step-number {
+    background: var(--accent);
+    color: white;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    font-weight: bold;
+    flex-shrink: 0;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .warning {
+    border-left: 4px solid #f59e0b;
+    background: rgba(245, 158, 11, 0.1);
+    padding: 1rem;
+    border-radius: 0 8px 8px 0;
+    margin-bottom: 1.5rem;
+    font-size: 0.95rem;
+  }
+
+  .warning strong {
+    color: #b45309;
+  }
+
+  .code-block {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 1rem;
+    border-radius: 8px;
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    overflow-x: auto;
+    position: relative;
+    margin: 1rem 0;
+    white-space: pre;
+  }
+
+  .copy-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: rgba(255,255,255,0.1);
+    border: none;
+    color: var(--code-fg);
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.7rem;
+    transition: background 0.2s;
+  }
+
+  .copy-btn:hover {
+    background: rgba(255,255,255,0.2);
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    background: var(--accent-soft);
+    color: var(--accent);
+    margin-right: 0.5rem;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+  }
+
+  .tech-pill {
+    border: 1px solid var(--border);
+    padding: 0.75rem;
+    border-radius: 8px;
+    text-align: center;
+    font-weight: 500;
+  }
+
+  ul {
+    padding-left: 1.25rem;
+  }
+
+  li {
+    margin-bottom: 0.5rem;
+  }
+</style>
+
+<div class="container">
+  <header>
+    <h1>CloudConsole Setup Guide</h1>
+    <p class="subtitle">Panduan Instalasi Produksi pada VPS Ubuntu + aaPanel</p>
+  </header>
+
+  <div class="section">
+    <h2>Sistem Arsitektur</h2>
+    <div class="grid">
+      <div class="tech-pill"><strong>Runtime:</strong> Node.js 20 LTS</div>
+      <div class="tech-pill"><strong>Database:</strong> PostgreSQL</div>
+      <div class="tech-pill"><strong>Queue:</strong> Redis</div>
+      <div class="tech-pill"><strong>Frontend:</strong> Next.js 14</div>
+    </div>
+  </div>
+
+  <div class="warning">
+    <strong>⚠️ PENTING:</strong> Aplikasi ini menggunakan <strong>PostgreSQL</strong>, bukan MySQL. Pastikan Anda menginstall PostgreSQL melalui App Store aaPanel sebelum memulai.
+  </div>
+
+  <div class="section">
+    <h2><span class="step-number">1</span> Persiapan aaPanel</h2>
+    <div class="card">
+      <p>Install komponen berikut melalui <strong>App Store</strong> aaPanel:</p>
+      <ul>
+        <li><strong>Node.js Version Manager:</strong> Pilih versi 20.x LTS.</li>
+        <li><strong>PostgreSQL:</strong> Install versi terbaru yang tersedia.</li>
+        <li><strong>Redis:</strong> Install untuk menangani queue BullMQ.</li>
+      </ul>
+      <p>Buat database PostgreSQL baru (misal: <code>cloud_console</code>) dan catat kredensialnya.</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2><span class="step-number">2</span> Instalasi Backend & API</h2>
+    <p>Jalankan perintah berikut melalui SSH Terminal:</p>
+
+    <div class="code-block">
+<button class="copy-btn" onclick="copyCode(this)">Copy</button>
+cd /www/wwwroot
+git clone <url-repo-anda> cloud-console
+cd cloud-console
+npm install
+cp .env.example .env
+nano .env
+    </div>
+
+    <p><strong>Konfigurasi <code>.env</code>:</strong></p>
+    <ul>
+      <li><code>DATABASE_URL</code>: <code>postgresql://user:pass@localhost:5432/cloud_console?schema=public</code></li>
+      <li><code>AUTH_SECRET</code>: Jalankan <code>openssl rand -base64 32</code> untuk generate.</li>
+      <li><code>REDIS_HOST</code>: <code>127.0.0.1</code></li>
+    </ul>
+
+    <div class="code-block">
+<button class="copy-btn" onclick="copyCode(this)">Copy</button>
+# Setup Database & Build
+npx prisma generate
+npx prisma migrate deploy
+npx prisma db seed
+npm run build
+    </div>
+  </div>
+
+  <div class="section">
+    <h2><span class="step-number">3</span> Manajemen Proses (PM2)</h2>
+    <p>Gunakan PM2 agar aplikasi berjalan otomatis di background:</p>
+
+    <div class="code-block">
+<button class="copy-btn" onclick="copyCode(this)">Copy</button>
+sudo npm install pm2 -g
+
+# API Server
+pm2 start npm --name "cloud-console-api" -- start
+
+# VPN Worker
+pm2 start dist/lib/queue/vpnWorker.ts --name "vpn-worker"
+
+# Cron System (Billing)
+pm2 start dist/lib/cron/index.ts --name "vpn-cron"
+
+pm2 save
+pm2 startup
+    </div>
+  </div>
+
+  <div class="section">
+    <h2><span class="step-number">4</span> Konfigurasi Domain & SSL</h2>
+    <div class="card">
+      <ol>
+        <li>Buka <strong>Website</strong> $\rightarrow$ <strong>Add Site</strong> $\rightarrow$ Masukkan Domain Anda.</li>
+        <li>Klik Nama Domain $\rightarrow$ <strong>Reverse Proxy</strong> $\rightarrow$ <strong>Add Reverse Proxy</strong>.</li>
+        <li>Set <strong>Target URL</strong> ke: <code>http://127.0.0.1:3000</code>.</li>
+        <li>Buka menu <strong>SSL</strong> $\rightarrow$ Pilih <strong>Let's Encrypt</strong> $\rightarrow$ Apply.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2><span class="step-number">5</span> Checklist Akhir</h2>
+    <div class="card">
+      <ul>
+        <li><input type="checkbox"> PostgreSQL sudah running dan migrasi selesai.</li>
+        <li><input type="checkbox"> Redis sudah aktif.</li>
+        <li><input type="checkbox"> PM2 status menunjukkan semua proses "online".</li>
+        <li><input type="checkbox"> SSL aktif (HTTPS).</li>
+        <li><input type="checkbox"> Port UDP 51820 terbuka (Jika menggunakan VPN).</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+  function copyCode(btn) {
+    const code = btn.parentElement.innerText.replace('Copy', '').trim();
+    navigator.clipboard.writeText(code).then(() => {
+      const originalText = btn.innerText;
+      btn.innerText = 'Copied!';
+      setTimeout(() => btn.innerText = originalText, 2000);
+    }).catch(err => {
+      console.error('Failed to copy', err);
+    });
+  }
+</script>

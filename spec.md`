@@ -7,7 +7,7 @@ This document outlines the hardware and software requirements for the servers us
 Since you are starting with a limited budget, I recommend a **Hybrid Approach**: starting with a high-value mid-range server and scaling horizontally.
 
 ### A. Entry-Level Node (Budget Friendly)
-*Best for: Small group of users, basic VPNs, and lightweight App Deployments.*
+*Best for: Small group of users, basic VPNs, and lightweight App D\yments.*
 - **CPU:** 4 vCPU / 8 Cores (AMD EPYC or Intel Xeon)
 - **RAM:** 16 GB - 32 GB DDR4
 - **Storage:** 250 GB - 500 GB NVMe SSD (Crucial for Disk I/O performance)
